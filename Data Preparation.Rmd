@@ -1,0 +1,94 @@
+---
+title: "Data Preparation"
+author: Xinghan Liu
+date: 2023/06
+output: word_document
+---
+
+```{r setup, warning= FALSE}
+#install required packages
+if (!require("readxl")) install.packages("readxl")
+library(readxl)
+if (!require("openxlsx")) install.packages("openxlsx")
+library(openxlsx)
+library(dplyr) 
+library(ggplot2)
+```
+
+```{r, include = T,warning=FALSE}
+# Read the first sheet
+sheet1_data <- read_excel('/Users/hankhan688/Documents/survey.xlsx',sheet ="Sheet1")
+# Read the second sheet
+sheet2_data <- read_excel('/Users/hankhan688/Documents/survey.xlsx', sheet = "Sheet 2")
+#I firstly realized the data of time was not in its orginial format, I need to convert them back
+time1<-openxlsx::convertToDateTime(sheet2_data$Timestamp)
+sheet2_data$Timestamp<- time1
+#combine two data into one
+dataall<-rbind(sheet1_data,sheet2_data) 
+```
+
+
+```{r, include = T}
+#Cleaning data
+dataclean<-dataall
+dataclean<-subset(dataclean, select = c(Timestamp,Age,Gender,Country,state,self_employed,
+                                        family_history,treatment,work_interfere))
+#Clean the Year-------------------------------------------------------
+year_freq <- dataclean %>%
+  # Extract the year from the "Timestamp" column
+  mutate(year = format(as.Date(Timestamp), "%Y")) %>%
+  # Count the occurrences of the year
+  count(year)
+# Print the frequency table, found there are error data of 1905.
+print(year_freq)
+
+# from the table we need to remove the year which is 1905
+dataclean <- dataclean %>%
+  # Extract the year from the "Timestamp" column 
+  mutate(year = format(as.Date(Timestamp), "%Y")) %>%
+  mutate(year = as.numeric(year)) 
+#Let date to be NA for error entry
+dataclean$Timestamp[dataclean$year == 1905] <- NA
+hist(as.numeric(format(as.Date(dataclean$Timestamp), "%Y")))
+#remove the year variable
+dataclean<-subset(dataclean, select = -year)
+
+
+```
+
+```{r, echo = T}
+#Clean the Age-------------------------------------------------------
+hist(dataclean$Age)
+dataclean$Age[dataclean$Age<0] <-NA
+dataclean$Age[dataclean$Age>72] <-NA
+hist(dataclean$Age)
+```
+
+```{r, echo = T}
+#Clean the gender
+dataclean$Gender <- ifelse(grepl("^[Mm]", dataclean$Gender), "Male",
+                           ifelse(grepl("^[Ff]", dataclean$Gender), "Female", "Unknown"))
+ggplot(dataclean, aes(x = Age, colour = Gender, fill = Gender)) +
+          geom_freqpoly(bins=10)
+```
+
+
+```{r, echo = T}
+
+#Clean the country and state let different writing to be the same---------------------------
+table(dataclean$Country)
+dataclean$Country <- ifelse(dataclean$Country == "UK", "United Kingdom",
+                            ifelse(dataclean$Country == "US", "United States", dataclean$Country))
+table(dataclean$state)
+dataclean$state <- ifelse(dataclean$state== "California", "CA",
+                            ifelse(dataclean$state == "New York", "NY",
+                                   ifelse(dataclean$state == "Texas","TX", dataclean$state)))
+#Clean the treatment error term
+dataclean$treatment <- ifelse(dataclean$treatment== "-", NA,
+                          ifelse(dataclean$treatment == "N", "NA",
+                                 ifelse(dataclean$treatment== "Y","Yes",dataclean$treatment)))
+#Clean the work_interfere error term
+dataclean$work_interfere <- ifelse(dataclean$work_interfere== "0", NA ,dataclean$work_interfere)
+#save the cleaned data
+write.csv(dataclean, "/Users/hankhan688/Documents/dataclean.csv")
+```
